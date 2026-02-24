@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:14
+    container_name: gateway-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gatewaydb
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

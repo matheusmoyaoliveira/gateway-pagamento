@@ -1,0 +1,39 @@
+package com.project.gateway_pagamento.shared.exceptions;
+
+import org.springframework.http.HttpStatus;
+
+public class BusinessException extends RuntimeException {
+
+    private final String code;
+    private final HttpStatus status;
+
+    public BusinessException(String code, String message, HttpStatus status) {
+        super(message);
+        this.code = code;
+        this.status = status;
+    }
+
+    public String getCode() {
+        return code;
+    }
+
+    public HttpStatus getStatus() {
+        return status;
+    }
+
+    public static BusinessException badRequest(String code, String message) {
+        return new BusinessException(code, message, HttpStatus.BAD_REQUEST);
+    }
+
+    public static BusinessException conflict(String code, String message) {
+        return new BusinessException(code, message, HttpStatus.CONFLICT);
+    }
+
+    public static BusinessException forbidden(String code, String message) {
+        return new BusinessException(code, message, HttpStatus.FORBIDDEN);
+    }
+
+    public static BusinessException notFound(String code, String message) {
+        return new BusinessException(code, message, HttpStatus.NOT_FOUND);
+    }
+}
