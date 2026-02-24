@@ -2,10 +2,10 @@ package com.project.gateway_pagamento.webhooks.infra;
 
 import com.project.gateway_pagamento.webhooks.domain.WebhookEvent;
 import com.project.gateway_pagamento.webhooks.domain.WebhookEventStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import java.awt.print.Pageable;
 import java.util.List;
 
 public interface WebhookEventRepository extends JpaRepository<WebhookEvent, String> {

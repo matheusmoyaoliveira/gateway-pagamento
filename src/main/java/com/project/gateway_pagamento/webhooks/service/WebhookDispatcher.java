@@ -27,7 +27,7 @@ public class WebhookDispatcher {
 
     @Scheduled(fixedDelay = 5000)
     public void dispatch() {
-        List<WebhookEvent> events = eventRepository.findReadyToDispatch(PageRequest.of(0,50));
+        List<WebhookEvent> events = eventRepository.findReadyToDispatch(PageRequest.of(0, 50));
         for (WebhookEvent event : events) {
             dispatchOne(event);
         }
@@ -36,7 +36,7 @@ public class WebhookDispatcher {
     private void dispatchOne(WebhookEvent event) {
         var webhookOpt = webhookRepository.findByMerchantIdAndEnabledTrue(event.getMerchantId());
         if (webhookOpt.isEmpty()) {
-            event.markFailed("Webhook not configured/enable", nextRetry(event.getAttempts()));
+            event.markFailed("Webhook not configured/enabled", nextRetry(event.getAttempts()));
             eventRepository.save(event);
             return;
         }
@@ -47,7 +47,7 @@ public class WebhookDispatcher {
             webhookWebClient.post()
                     .uri(url)
                     .header("Content-Type", "application/json")
-                    .header("X-Event_Type", event.getEventType())
+                    .header("X-Event-Type", event.getEventType())
                     .bodyValue(event.getPayload())
                     .retrieve()
                     .toBodilessEntity()
