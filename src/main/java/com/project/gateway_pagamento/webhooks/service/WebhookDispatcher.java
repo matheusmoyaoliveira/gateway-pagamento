@@ -1,7 +1,6 @@
 package com.project.gateway_pagamento.webhooks.service;
 
 import com.project.gateway_pagamento.webhooks.domain.WebhookEvent;
-import com.project.gateway_pagamento.webhooks.domain.WebhookEventStatus;
 import com.project.gateway_pagamento.webhooks.infra.WebhookEventRepository;
 import com.project.gateway_pagamento.webhooks.infra.WebhookRepository;
 import org.springframework.data.domain.PageRequest;
@@ -9,6 +8,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
+
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryRegistry;
+import io.github.resilience4j.reactor.retry.RetryOperator;
+
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -19,10 +29,15 @@ public class WebhookDispatcher {
     private final WebhookEventRepository eventRepository;
     private final WebClient webhookWebClient;
 
-    public WebhookDispatcher(WebhookRepository webhookRepository, WebhookEventRepository eventRepository, WebClient webhookWebClient) {
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
+    private final RetryRegistry retryRegistry;
+
+    public WebhookDispatcher(WebhookRepository webhookRepository, WebhookEventRepository eventRepository, WebClient webhookWebClient, CircuitBreakerRegistry circuitBreakerRegistry, RetryRegistry retryRegistry) {
         this.webhookRepository = webhookRepository;
         this.eventRepository = eventRepository;
         this.webhookWebClient = webhookWebClient;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
+        this.retryRegistry = retryRegistry;
     }
 
     @Scheduled(fixedDelay = 5000)
@@ -44,14 +59,22 @@ public class WebhookDispatcher {
         String url = webhookOpt.get().getUrl();
 
         try {
-            webhookWebClient.post()
+            CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker("webhookDelivery");
+            Retry retry = retryRegistry.retry("webhookDelivery");
+
+            Mono<Void> call = webhookWebClient.post()
                     .uri(url)
                     .header("Content-Type", "application/json")
                     .header("X-Event-Type", event.getEventType())
                     .bodyValue(event.getPayload())
                     .retrieve()
                     .toBodilessEntity()
-                    .block();
+                    .timeout(Duration.ofSeconds(3))
+                    .then();
+
+            call.transformDeferred(CircuitBreakerOperator.of(cb))
+                .transformDeferred(RetryOperator.of(retry))
+                .block();
 
             event.markSent();
             eventRepository.save(event);
