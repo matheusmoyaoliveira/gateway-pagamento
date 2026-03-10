@@ -106,6 +106,24 @@ public class PaymentService {
         return saved;
     }
 
+    public Payment cancelPayment(String id) {
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new PaymentNotFoundException(id));
+
+        if (payment.getStatus() != PaymentStatus.AUTHORIZED) {
+            throw BusinessException.badRequest(
+                    "invalid_payment_status_for_cancel",
+                    "Payment with id " + id + " cannot be canceled from status " + payment.getStatus()
+            );
+        }
+
+        payment.setStatus(PaymentStatus.CANCELED);
+
+        Payment saved = paymentRepository.save(payment);
+        webhookEventService.enqueuePaymentEvent(saved, "payment.canceled");
+        return saved;
+    }
+
     public Optional<Payment> getPaymentById(String id) {
         return paymentRepository.findById(id);
     }
