@@ -214,4 +214,75 @@ public class PaymentsIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.items[0].merchantId").value("lojax"));
     }
+
+    @Test
+    void cancelPayment_authorized_shouldReturnCanceled() throws Exception {
+        String payload = """
+            {
+              "amount": 5000,
+              "currency": "BRL",
+              "paymentMethod": "card",
+              "cardToken": "tok_test_123"
+            }
+            """;
+
+        String createBody = mockMvc.perform(post("/v1/payments")
+                        .header("X-API-Key", API_KEY_LOJA2)
+                        .header("Idempotency-Key", "cancel-seed-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String paymentId = objectMapper.readTree(createBody).get("id").asText();
+
+        mockMvc.perform(post("/v1/payments/{id}/cancel", paymentId)
+                        .header("X-API-Key", API_KEY_LOJA2))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(paymentId))
+                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.merchantId").value("loja2"));
+    }
+
+    @Test
+    void capturePayment_canceled_shouldReturn400() throws Exception {
+        String payload = """
+            {
+              "amount": 5000,
+              "currency": "BRL",
+              "paymentMethod": "card",
+              "cardToken": "tok_test_123"
+            }
+            """;
+
+        String createBody = mockMvc.perform(post("/v1/payments")
+                        .header("X-API-Key", API_KEY_LOJA2)
+                        .header("Idempotency-Key", "cancel-seed-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String paymentId = objectMapper.readTree(createBody).get("id").asText();
+
+        mockMvc.perform(post("/v1/payments/{id}/cancel", paymentId)
+                        .header("X-API-Key", API_KEY_LOJA2))
+                .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(paymentId))
+                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.merchantId").value("loja2"));
+
+
+        mockMvc.perform(post("/v1/payments/{id}/capture", paymentId)
+                        .header("X-API-Key", API_KEY_LOJA2))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_payment_status_for_capture"));
+    }
 }
