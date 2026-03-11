@@ -1,43 +1,47 @@
 # Gateway de Pagamento
 
-API REST desenvolvida em **Java + Spring Boot** para simular um gateway de pagamento com foco em **boas práticas de back-end**, **segurança**, **idempotência**, **multi-tenant**, **webhooks** e **testes de integração**.
+API REST desenvolvida em **Java 21 + Spring Boot** para simular operações centrais de um gateway de pagamento, com foco em **segurança, consistência transacional, multi-tenant, idempotência, webhooks e testes de integração**.
 
-O projeto foi construído para representar um cenário próximo ao mercado: cada lojista (merchant) possui sua própria chave de API, consegue criar e consultar pagamentos, realizar captura e reembolso, configurar webhooks e proteger operações críticas contra duplicidade de requisições.
-
----
+> Projeto de portfólio construído para demonstrar competências práticas de back-end aplicadas a um cenário de mercado: autenticação por API Key, proteção contra requisições duplicadas, limitação de taxa por merchant, isolamento de dados e comunicação assíncrona por eventos.
 
 ## Visão geral
 
-Este projeto implementa uma camada de gateway responsável por:
+Este projeto representa a base de um gateway responsável por receber requisições de pagamento de diferentes lojistas, validar o acesso, registrar transações, controlar o ciclo de vida do pagamento e notificar sistemas externos via webhook.
 
-- autenticar requisições via **API Key**;
-- isolar os dados por **merchant**;
-- criar pagamentos com suporte a **idempotência**;
-- listar e consultar pagamentos;
-- capturar e reembolsar pagamentos com validação de status;
-- configurar **webhooks** por merchant;
-- enfileirar e despachar eventos de pagamento com **retry**;
-- aplicar **rate limiting** por merchant;
-- padronizar respostas de erro;
-- garantir confiabilidade com **testes de integração**.
+Além do fluxo principal de criação de pagamentos, a aplicação implementa preocupações que aparecem em sistemas reais:
 
----
+- **Autenticação por API Key** para identificar o merchant chamador
+- **Idempotência** para evitar pagamentos duplicados em reenvios da mesma requisição
+- **Isolamento multi-tenant** para separar dados por merchant
+- **Rate limiting** para proteção básica contra abuso da API
+- **Webhooks** para integração orientada a eventos
+- **Tratamento padronizado de erros** para consumo mais previsível da API
+- **Testes de integração com Testcontainers** usando PostgreSQL real
 
-## Objetivos do projeto
+## Destaques técnicos
 
-Este projeto foi desenvolvido para praticar e demonstrar competências importantes de back-end, como:
+### 1. Idempotência com isolamento por merchant
+A API suporta o header `Idempotency-Key` na criação de pagamentos. Quando a mesma chave é reutilizada com o mesmo payload para o mesmo merchant, a aplicação retorna a mesma resposta original, evitando a criação de transações duplicadas.
 
-- construção de APIs REST com Spring Boot;
-- modelagem de domínio para pagamentos;
-- persistência com Spring Data JPA;
-- versionamento de banco com Flyway;
-- autenticação customizada com filtro de segurança;
-- proteção contra duplicidade com idempotência;
-- comunicação assíncrona via webhooks;
-- observabilidade com correlation id e logs;
-- testes de integração com Testcontainers e PostgreSQL.
+Se a mesma chave for reutilizada com payload diferente, a API responde com conflito.
 
----
+Além disso, a chave é tratada em contexto **multi-tenant**, permitindo que merchants diferentes reutilizem a mesma idempotency key sem colisão entre si.
+
+### 2. Segurança por API Key
+Todas as rotas de negócio exigem o header `X-API-Key`. O filtro de autenticação identifica o merchant, valida se ele está ativo e injeta esse contexto durante o processamento da requisição.
+
+### 3. Rate limiting por merchant
+A aplicação possui limitação de taxa com **Bucket4j**, aplicando uma política por merchant para reduzir risco de abuso e excesso de chamadas.
+
+### 4. Webhooks para eventos de pagamento
+O sistema permite cadastrar um endpoint de webhook por merchant e enfileira eventos relacionados ao ciclo de vida do pagamento, como:
+
+- `payment.authorized`
+- `payment.captured`
+- `payment.refunded`
+
+### 5. Testes de integração realistas
+Os testes usam **Testcontainers + PostgreSQL**, o que aproxima o ambiente de teste do comportamento real da aplicação, especialmente em cenários de persistência, autenticação e idempotência.
 
 ## Tecnologias utilizadas
 
@@ -46,212 +50,124 @@ Este projeto foi desenvolvido para praticar e demonstrar competências important
 - **Spring Web**
 - **Spring Security**
 - **Spring Data JPA**
-- **Spring Validation**
-- **Spring WebFlux** (WebClient para envio de webhooks)
 - **PostgreSQL**
 - **Flyway**
 - **Bucket4j**
+- **Spring WebFlux**
 - **JUnit 5**
-- **Spring Boot Test**
+- **MockMvc**
 - **Testcontainers**
 - **Docker Compose**
 - **Maven**
 
----
-
-## Principais funcionalidades
-
-### 1. Autenticação por API Key
-Todas as rotas protegidas exigem o header:
-
-```http
-X-API-Key: sua-chave
-```
-
-A autenticação é feita por filtro customizado, buscando o merchant no banco e validando se ele está ativo.
-
-### 2. Multi-tenant por merchant
-O sistema foi pensado para separar os dados por lojista. Cada pagamento pertence a um merchant, e as listagens retornam apenas os registros do merchant autenticado.
-
-### 3. Idempotência em criação de pagamento
-A criação de pagamento suporta o header:
-
-```http
-Idempotency-Key: chave-unica-da-requisicao
-```
-
-Se a mesma chave for enviada novamente com o **mesmo payload**, a API devolve a mesma resposta anterior. Se a mesma chave for reutilizada com **payload diferente**, a API retorna conflito.
-
-### 4. Ciclo de vida do pagamento
-Atualmente o fluxo principal contempla os estados:
-
-- `AUTHORIZED`
-- `CAPTURED`
-- `REFUNDED`
-
-Também existem estados modelados no domínio para evolução futura:
-
-- `CREATED`
-- `CANCELED`
-- `DECLINED`
-
-### 5. Captura e reembolso com regra de negócio
-O projeto valida transições de status importantes:
-
-- só é possível **capturar** um pagamento em `AUTHORIZED`;
-- só é possível **reembolsar** um pagamento em `CAPTURED`.
-
-### 6. Webhooks
-Cada merchant pode configurar uma URL de webhook para receber eventos de pagamento.
-
-Eventos gerados atualmente:
-
-- `payment.authorized`
-- `payment.captured`
-- `payment.refunded`
-
-### 7. Retry de webhook
-Os eventos de webhook são persistidos e reenviados automaticamente em caso de falha, com política simples de retry baseada em tempo.
-
-### 8. Rate limiting
-A API aplica limite de requisições por merchant usando Bucket4j.
-
-Configuração atual:
-
-- **60 requisições por minuto por merchant**
-
-Quando o limite é excedido, a API responde com `429 Too Many Requests` e headers de controle.
-
-### 9. Tratamento global de erros
-Os erros são centralizados em um handler global, retornando payload consistente para cenários como:
-
-- validação de entrada;
-- recurso não encontrado;
-- conflito de regra de negócio;
-- erro interno.
-
-### 10. Correlation ID
-A aplicação utiliza `X-Correlation-Id` para rastreabilidade de requisições e propagação em payloads de webhook.
-
----
-
 ## Arquitetura e organização do projeto
 
-A estrutura foi separada por responsabilidade e contexto de domínio:
+A estrutura foi separada por responsabilidades de domínio e infraestrutura:
 
-```bash
+```text
 src/main/java/com/project/gateway_pagamento
-├── config/
-├── idempotency/
-├── merchants/
-├── payments/
-│   ├── api/
-│   ├── domain/
-│   └── infra/
-├── security/
-├── shared/
-└── webhooks/
-    ├── api/
-    ├── domain/
-    ├── infra/
-    └── service/
+├── config
+├── idempotency
+├── merchants
+├── payments
+│   ├── api
+│   ├── domain
+│   └── infra
+├── security
+├── shared
+└── webhooks
+    ├── api
+    ├── domain
+    ├── infra
+    └── service
 ```
 
-### Papel de cada módulo
+### Responsabilidade de cada módulo
 
-- **config**: configurações gerais da aplicação, segurança, health check e cliente HTTP de webhook.
-- **idempotency**: persistência e reaproveitamento de respostas para requisições idempotentes.
-- **merchants**: entidade e repositório de lojistas.
-- **payments/api**: controllers, requests e responses da API de pagamentos.
-- **payments/domain**: regras de negócio de pagamento.
-- **payments/infra**: acesso a dados de pagamentos.
-- **security**: autenticação por API key, contexto do merchant, correlation id e rate limiting.
-- **shared**: paginação, respostas de erro e exceções compartilhadas.
-- **webhooks**: configuração, persistência, criação de eventos e dispatcher de webhooks.
+- **config**: configuração de segurança, health check e clientes auxiliares
+- **idempotency**: persistência e tratamento de chaves idempotentes
+- **merchants**: dados e repositório de lojistas
+- **payments/api**: endpoints, requests e responses
+- **payments/domain**: regras de negócio do pagamento
+- **payments/infra**: acesso a dados
+- **security**: filtros, contexto do merchant e rate limiting
+- **shared**: paginação, resposta de erro global e exceções customizadas
+- **webhooks**: cadastro, eventos e despacho de notificações
 
----
+## Fluxo principal da aplicação
 
-## Modelo de domínio resumido
+### Criar pagamento
+1. O cliente envia a requisição para `POST /v1/payments`
+2. O filtro valida o `X-API-Key`
+3. O merchant autenticado é carregado no contexto da requisição
+4. A aplicação verifica a `Idempotency-Key`, quando informada
+5. Um pagamento é criado com status inicial `AUTHORIZED`
+6. Um evento de webhook é enfileirado
+7. A resposta é devolvida ao cliente
 
-### Payment
-Representa a transação de pagamento.
+### Capturar pagamento
+Um pagamento em status `AUTHORIZED` pode ser capturado, passando para `CAPTURED`.
 
-Campos principais:
+### Reembolsar pagamento
+Um pagamento em status `CAPTURED` pode ser reembolsado, passando para `REFUNDED`.
 
-- `id`
-- `merchantId`
-- `amount`
-- `currency`
-- `paymentMethod`
-- `status`
-- `createdAt`
+## Regras de negócio implementadas
 
-### Merchant
-Representa o lojista autenticado na plataforma.
+- Apenas requisições autenticadas com `X-API-Key` acessam os endpoints de negócio
+- Merchants inativos recebem resposta `403 Forbidden`
+- Reenvio da mesma `Idempotency-Key` com mesmo payload retorna a mesma resposta anterior
+- Reenvio da mesma `Idempotency-Key` com payload diferente retorna `409 Conflict`
+- A listagem de pagamentos retorna apenas registros do merchant autenticado
+- Um pagamento só pode ser capturado se estiver em `AUTHORIZED`
+- Um pagamento só pode ser reembolsado se estiver em `CAPTURED`
+- URL de webhook precisa começar com `http://` ou `https://`
 
-Campos principais:
+## Modelo de status do pagamento
 
-- `id`
-- `name`
-- `status`
-- `apiKey`
-- `createdAt`
-
-### IdempotencyKey
-Armazena o hash da requisição e a resposta já devolvida para evitar duplicidade.
-
-Chave composta por:
-
-- `merchantId`
-- `key`
-
-### Webhook
-Configuração de endpoint de notificação por merchant.
-
-### WebhookEvent
-Evento persistido para envio assíncrono e retry.
-
----
+```text
+AUTHORIZED -> CAPTURED -> REFUNDED
+```
 
 ## Banco de dados e migrations
 
-O versionamento do banco é feito com **Flyway**, com migrations para:
+O projeto utiliza **Flyway** para versionamento do banco de dados.
 
-- criação da tabela `payments`;
-- criação da tabela `idempotency_keys`;
-- criação da tabela `merchants`;
-- adição da `api_key` em merchants;
-- adaptação da idempotência para cenário **multi-tenant**;
-- criação da tabela `webhooks`;
-- criação da tabela `webhook_events`.
+Migrations presentes:
 
----
+- `V1__create_payments.sql`
+- `V2__create_idempotency_keys.sql`
+- `V3__create_merchants.sql`
+- `V4__add_api_key_to_merchants.sql`
+- `V5__make_idempotency_keys_multi_tenant.sql`
+- `V6__create_webhooks.sql`
+- `V7__create_webhook_events.sql`
+
+Esse versionamento mostra evolução incremental do sistema e facilita reprodução do ambiente em diferentes máquinas.
 
 ## Como executar o projeto localmente
 
 ### Pré-requisitos
 
 - Java 21
-- Maven 3.9+ ou uso do Maven Wrapper (`./mvnw`)
+- Maven
 - Docker e Docker Compose
 
-### 1. Subir o PostgreSQL
+### 1. Subir o banco de dados
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-O banco será exposto em:
+O PostgreSQL será exposto em:
 
-- **host:** `localhost`
 - **porta:** `5433`
 - **database:** `gatewaydb`
-- **username:** `gateway`
+- **user:** `gateway`
 - **password:** `gateway`
 
 ### 2. Executar a aplicação
 
-No Linux/macOS:
+No diretório do projeto:
 
 ```bash
 ./mvnw spring-boot:run
@@ -263,43 +179,40 @@ No Windows:
 mvnw.cmd spring-boot:run
 ```
 
-### 3. URL base da API
+### 3. URL base da aplicação
 
-```bash
+```text
 http://localhost:8080
 ```
 
----
+### 4. Health check
 
-## Configurações principais
+```http
+GET /actuator/health
+```
 
-As configurações principais da aplicação incluem:
+## Configuração principal
 
-- conexão com PostgreSQL em `localhost:5433`;
-- `ddl-auto=validate` para validar o schema existente;
-- Flyway habilitado para migrations automáticas;
-- endpoints do actuator expostos para health/info.
+A aplicação está configurada para usar PostgreSQL local com as seguintes propriedades:
 
----
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5433/gatewaydb
+spring.datasource.username=gateway
+spring.datasource.password=gateway
+spring.jpa.hibernate.ddl-auto=validate
+spring.flyway.enabled=true
+```
 
 ## Endpoints principais
 
-## Health check
+### Pagamentos
 
-### `GET /health`
-Retorna um health check simples da aplicação.
+#### Criar pagamento
+```http
+POST /v1/payments
+```
 
-### `GET /actuator/health`
-Health check via Spring Boot Actuator.
-
----
-
-## Pagamentos
-
-### `POST /v1/payments`
-Cria um novo pagamento.
-
-#### Headers
+Headers:
 
 ```http
 X-API-Key: sk_live_loja2_456
@@ -307,7 +220,7 @@ Idempotency-Key: pagamento-001
 Content-Type: application/json
 ```
 
-#### Body
+Body:
 
 ```json
 {
@@ -318,11 +231,11 @@ Content-Type: application/json
 }
 ```
 
-#### Exemplo de resposta
+Resposta esperada:
 
 ```json
 {
-  "id": "7f5f6c6a-8f1a-4cb8-a5be-f8ff6d9f9d31",
+  "id": "c5b0f3c2-3d93-4e0d-a5db-3d2d4d5b1234",
   "status": "AUTHORIZED",
   "amount": 5000,
   "currency": "BRL",
@@ -331,67 +244,45 @@ Content-Type: application/json
 }
 ```
 
----
-
-### `GET /v1/payments?page=0&size=10`
-Lista os pagamentos do merchant autenticado com paginação.
-
-#### Query params
-
-- `page`: página atual
-- `size`: tamanho da página
-- `status` *(opcional)*: filtra por status
-
-#### Exemplo de resposta
-
-```json
-{
-  "items": [
-    {
-      "id": "7f5f6c6a-8f1a-4cb8-a5be-f8ff6d9f9d31",
-      "status": "AUTHORIZED",
-      "amount": 5000,
-      "currency": "BRL",
-      "paymentMethod": "card",
-      "merchantId": "loja2"
-    }
-  ],
-  "page": 0,
-  "size": 10,
-  "totalElements": 1,
-  "totalPages": 1
-}
+#### Listar pagamentos
+```http
+GET /v1/payments?page=0&size=10
 ```
 
----
+Filtro opcional:
 
-### `GET /v1/payments/{id}`
-Busca um pagamento por ID.
+```http
+GET /v1/payments?page=0&size=10&status=AUTHORIZED
+```
 
----
+#### Buscar pagamento por ID
+```http
+GET /v1/payments/{id}
+```
 
-### `POST /v1/payments/{id}/capture`
-Captura um pagamento que esteja em status `AUTHORIZED`.
+#### Capturar pagamento
+```http
+POST /v1/payments/{id}/capture
+```
 
----
+#### Reembolsar pagamento
+```http
+POST /v1/payments/{id}/refund
+```
 
-### `POST /v1/payments/{id}/refund`
-Reembolsa um pagamento que esteja em status `CAPTURED`.
+### Webhooks
 
----
+#### Consultar webhook do merchant
+```http
+GET /v1/webhooks
+```
 
-## Webhooks
+#### Criar ou atualizar webhook
+```http
+PUT /v1/webhooks
+```
 
-### `GET /v1/webhooks`
-Consulta a configuração atual de webhook do merchant autenticado.
-
-- retorna `200 OK` se existir webhook configurado;
-- retorna `204 No Content` se não existir configuração.
-
-### `PUT /v1/webhooks`
-Cria ou atualiza a configuração de webhook do merchant.
-
-#### Body
+Body:
 
 ```json
 {
@@ -400,171 +291,98 @@ Cria ou atualiza a configuração de webhook do merchant.
 }
 ```
 
-#### Exemplo de resposta
+## Exemplos de erros tratados
 
+### Chave idempotente reutilizada com payload diferente
 ```json
 {
-  "merchantId": "loja2",
-  "url": "https://meusistema.com/webhooks/pagamentos",
-  "enabled": true,
-  "createdAt": "2026-02-18T20:00:00Z",
-  "updatedAt": "2026-02-18T20:05:00Z"
+  "code": "idempotency_conflict",
+  "message": "Idempotency-Key recused with different payload",
+  "details": null
 }
 ```
 
----
-
-## Exemplo de uso com cURL
-
-### Criar pagamento
-
-```bash
-curl --location 'http://localhost:8080/v1/payments' \
---header 'X-API-Key: sk_live_loja2_456' \
---header 'Idempotency-Key: pagamento-001' \
---header 'Content-Type: application/json' \
---data '{
-  "amount": 5000,
-  "currency": "BRL",
-  "paymentMethod": "card",
-  "cardToken": "tok_test_123"
-}'
+### Erro de validação
+```json
+{
+  "code": "validation_error",
+  "message": "Invalid request",
+  "details": {
+    "amount": "amount must be greater than 0"
+  }
+}
 ```
 
-### Listar pagamentos
+### Limite de requisições excedido
+A API responde com `429 Too Many Requests` e inclui headers como:
 
-```bash
-curl --location 'http://localhost:8080/v1/payments?page=0&size=10' \
---header 'X-API-Key: sk_live_loja2_456'
+```http
+Retry-After
+X-RateLimit-Limit
+X-RateLimit-Remaining
+X-RateLimit-Reset
 ```
-
-### Capturar pagamento
-
-```bash
-curl --location --request POST 'http://localhost:8080/v1/payments/{id}/capture' \
---header 'X-API-Key: sk_live_loja2_456'
-```
-
-### Reembolsar pagamento
-
-```bash
-curl --location --request POST 'http://localhost:8080/v1/payments/{id}/refund' \
---header 'X-API-Key: sk_live_loja2_456'
-```
-
-### Configurar webhook
-
-```bash
-curl --location --request PUT 'http://localhost:8080/v1/webhooks' \
---header 'X-API-Key: sk_live_loja2_456' \
---header 'Content-Type: application/json' \
---data '{
-  "url": "https://meusistema.com/webhooks/pagamentos",
-  "enabled": true
-}'
-```
-
----
-
-## Regras de negócio implementadas
-
-- todo pagamento criado já nasce com status **AUTHORIZED**;
-- o merchant autenticado é obtido a partir da **API Key**;
-- a listagem de pagamentos retorna apenas os registros do merchant autenticado;
-- o mesmo `Idempotency-Key` com o mesmo payload devolve a mesma resposta previamente salva;
-- o mesmo `Idempotency-Key` com payload diferente gera conflito;
-- a idempotência é isolada por merchant, permitindo a mesma chave para lojistas diferentes;
-- captura só é permitida para pagamentos em `AUTHORIZED`;
-- reembolso só é permitido para pagamentos em `CAPTURED`;
-- webhooks só são enfileirados quando existe configuração habilitada para o merchant;
-- falhas no envio de webhook geram retry automático;
-- merchants inativos recebem bloqueio de acesso;
-- requisições acima do limite configurado retornam `429 Too Many Requests`.
-
----
-
-## Segurança e confiabilidade
-
-O projeto implementa alguns mecanismos relevantes de segurança e robustez:
-
-- autenticação stateless com API key;
-- separação de contexto por merchant;
-- rate limiting por merchant;
-- correlation id para rastreabilidade;
-- validação de payload com Bean Validation;
-- tratamento global de exceções;
-- persistência de eventos de webhook para evitar perda de notificações;
-- retries em falhas de integração.
-
----
 
 ## Testes
 
-O projeto possui **testes de integração** com:
+O projeto contém testes automatizados com foco em cenários relevantes de negócio e integração.
 
-- **Spring Boot Test**
-- **MockMvc**
-- **Testcontainers**
-- **PostgreSQL**
+### Cenários cobertos
 
-### Cenários já cobertos
+- replay idempotente retorna o mesmo pagamento
+- conflito de idempotência com payload diferente retorna `409`
+- mesma idempotency key para merchants diferentes não gera colisão
+- listagem retorna apenas pagamentos do merchant autenticado
 
-- replay idempotente retorna o mesmo pagamento;
-- conflito de idempotência retorna `409 Conflict`;
-- mesma chave idempotente para merchants diferentes gera pagamentos distintos;
-- listagem retorna apenas pagamentos do merchant autenticado.
-
-### Como rodar os testes
+### Executar testes
 
 ```bash
 ./mvnw test
 ```
 
-No Windows:
+## O que este projeto demonstra
 
-```bash
-mvnw.cmd test
-```
+Este projeto foi construído para evidenciar competências valorizadas em desenvolvimento back-end:
 
----
+- modelagem de API REST
+- separação de responsabilidades
+- segurança em nível de API
+- consistência de operações com idempotência
+- isolamento multi-tenant
+- tratamento padronizado de exceções
+- versionamento de banco com Flyway
+- testes de integração com infraestrutura realista
+- visão de arquitetura aplicada a problema de negócio
 
-## Possíveis melhorias futuras
+## Possíveis evoluções
 
-Como evolução de produto e arquitetura, este projeto pode crescer para incluir:
+Algumas melhorias naturais para próximas versões do projeto:
 
-- documentação OpenAPI/Swagger;
-- observabilidade com métricas e tracing distribuído;
-- fila dedicada para despacho de webhooks;
-- assinatura criptográfica de payloads de webhook;
-- expiração e limpeza automática de chaves de idempotência;
-- autorização por perfis e escopos;
-- suporte a cancelamento de pagamento;
-- testes unitários adicionais para serviços e filtros;
-- containerização completa da aplicação.
+- documentação OpenAPI/Swagger
+- processamento assíncrono mais robusto para webhooks
+- observabilidade com métricas e tracing
+- autenticação com credenciais rotativas e expiração de chaves
+- fila/mensageria para eventos
+- circuit breaker e retry policy para entregas externas
+- suporte a mais métodos de pagamento
+- paginação e filtros mais avançados
 
----
+## Para recrutadores e avaliadores técnicos
 
-## Diferenciais para portfólio
+Este projeto não foi pensado apenas como CRUD acadêmico. Ele foi estruturado para simular desafios que aparecem em sistemas de pagamento reais, como:
 
-Este projeto demonstra experiência prática com temas muito valorizados em back-end:
-
-- design de API REST;
-- regras de negócio de pagamentos;
-- segurança aplicada com filtros customizados;
-- idempotência em operações críticas;
-- arquitetura organizada por contexto;
-- integração resiliente com webhooks;
-- testes de integração realistas com banco efêmero.
-
----
+- proteção contra duplicidade de cobrança
+- segregação por cliente/lojista
+- proteção de acesso à API
+- governança mínima de tráfego
+- integração com sistemas terceiros por eventos
 
 ## Autor
 
-**Matheus Moya Oliveira**  
-GitHub: [matheusmoyaoliveira](https://github.com/matheusmoyaoliveira)
+**Matheus Moya Oliveira**
+
+- GitHub: `matheusmoyaoliveira`
 
 ---
 
-## Licença
-
-Este projeto pode ser utilizado para fins de estudo, portfólio e evolução técnica.
+Se este projeto fizer sentido para a vaga ou oportunidade, vale observar principalmente os módulos de **payments**, **security**, **idempotency** e **webhooks**, que concentram as decisões técnicas mais relevantes da solução.
