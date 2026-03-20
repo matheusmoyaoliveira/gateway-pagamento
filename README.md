@@ -4,6 +4,35 @@ API REST desenvolvida em **Java 21 + Spring Boot** para simular operações cent
 
 > Projeto de portfólio construído para demonstrar competências práticas de back-end aplicadas a um cenário de mercado: autenticação por API Key, proteção contra requisições duplicadas, limitação de taxa por merchant, isolamento de dados e comunicação assíncrona por eventos.
 
+## Stack
+
+- **Java 21**
+- **Spring Boot 3**
+- **Spring Web**
+- **Spring Security**
+- **Spring Data JPA**
+- **PostgreSQL**
+- **Flyway**
+- **Bucket4j**
+- **Spring WebFlux**
+- **JUnit 5**
+- **MockMvc**
+- **Testcontainers**
+- **Docker Compose**
+- **Maven**
+
+## Principais funcionalidades
+
+- Criação de pagamentos com status inicial `AUTHORIZED`
+- Captura e reembolso respeitando o ciclo de vida do pagamento
+- Autenticação por `X-API-Key` para identificar o merchant chamador
+- Suporte a `Idempotency-Key` para evitar transações duplicadas
+- Isolamento **multi-tenant** para separar dados por merchant
+- **Rate limiting** por merchant para proteção da API
+- Cadastro e disparo de **webhooks** para eventos de pagamento
+- Versionamento de banco com **Flyway**
+- Testes de integração com **Testcontainers + PostgreSQL**
+
 ## Visão geral
 
 Este projeto representa a base de um gateway responsável por receber requisições de pagamento de diferentes lojistas, validar o acesso, registrar transações, controlar o ciclo de vida do pagamento e notificar sistemas externos via webhook.
@@ -297,7 +326,7 @@ Body:
 ```json
 {
   "code": "idempotency_conflict",
-  "message": "Idempotency-Key recused with different payload",
+  "message": "Idempotency-Key reused with different payload",
   "details": null
 }
 ```
@@ -321,6 +350,25 @@ Retry-After
 X-RateLimit-Limit
 X-RateLimit-Remaining
 X-RateLimit-Reset
+```
+
+## Evidências recomendadas
+
+Para fortalecer este projeto no GitHub e no LinkedIn, vale incluir nesta seção alguns prints ou GIFs curtos, por exemplo:
+
+- requisição de criação de pagamento no Postman/Insomnia
+- resposta de replay idempotente retornando o mesmo pagamento
+- testes de integração passando no terminal
+- health check `GET /actuator/health`
+- visão geral da estrutura de pastas
+
+> Sugestão: salve as imagens em uma pasta `docs/images` e referencie aqui no README.
+
+Exemplo de uso:
+
+```md
+![Criação de pagamento](docs/images/create-payment.png)
+![Testes passando](docs/images/tests-passing.png)
 ```
 
 ## Testes
